@@ -4,8 +4,11 @@ import java.util.List;
 
 public record CategoriaPageResponseDTO(
     List<CategoriaResponseDTO> content,
-    int totalPages,
+    int page,
+    int size,
     long totalElements,
-    int number,
-    int size
-) {}
+    int totalPages,
+    boolean first,
+    boolean last
+) {
+}

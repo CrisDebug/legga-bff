@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Cliente HTTP encargado de centralizar la comunicación
+ * Cliente HTTP encargado de centralizar la comunicaciÃ³n
  * entre el BFF de LEGGA y el microservicio MS-Legajos.
  */
 @Component
@@ -38,10 +38,30 @@ public class LegajoClient {
         // CONSULTA PAGINADA DE LEGAJOS
         // =========================================================
 
-        public LegajoPageResponseDTO listar(EasyAuthIdentity identity) {
+        public LegajoPageResponseDTO listar(
+                EasyAuthIdentity identity,
+                String q,
+                UUID categoriaId,
+                int page,
+                int size) {
 
                 return restClient.get()
-                                .uri("/api/legajos")
+                                .uri(uriBuilder -> {
+                                        var builder = uriBuilder.path("/api/legajos");
+
+                                        if (q != null && !q.isBlank()) {
+                                                builder.queryParam("q", q);
+                                        }
+
+                                        if (categoriaId != null) {
+                                                builder.queryParam("categoriaId", categoriaId);
+                                        }
+
+                                        return builder
+                                                        .queryParam("page", page)
+                                                        .queryParam("size", size)
+                                                        .build();
+                                })
                                 .header("X-LEGGA-TENANT-ID", identity.tenantId())
                                 .header("X-LEGGA-OBJECT-ID", identity.objectId())
                                 .retrieve()
@@ -65,7 +85,7 @@ public class LegajoClient {
         }
 
         // =========================================================
-        // CREACIÓN DE LEGAJO
+        // CREACIÃ“N DE LEGAJO
         // =========================================================
 
         public LegajoResponseDTO crear(
@@ -89,6 +109,57 @@ public class LegajoClient {
         // CONSULTA DE CONTEXTO DE IDENTIDAD
         // =========================================================
 
+        // =========================================================
+        // ACTUALIZACIÃ“N DE LEGAJO
+        // =========================================================
+
+        public LegajoResponseDTO actualizar(
+                        UUID id,
+                        LegajoCreateMSRequest legajo,
+                        UUID categoriaId,
+                        EasyAuthIdentity identity) {
+
+                return restClient.put()
+                                .uri(uriBuilder -> uriBuilder
+                                                .path("/api/legajos/{id}")
+                                                .queryParam("categoriaId", categoriaId)
+                                                .build(id))
+                                .header("X-LEGGA-TENANT-ID", identity.tenantId())
+                                .header("X-LEGGA-OBJECT-ID", identity.objectId())
+                                .body(legajo)
+                                .retrieve()
+                                .body(LegajoResponseDTO.class);
+        }
+        // =========================================================
+        // ARCHIVAR LEGAJO
+        // =========================================================
+
+        public void archivar(
+                        UUID id,
+                        EasyAuthIdentity identity) {
+
+                restClient.patch()
+                                .uri("/api/legajos/{id}/archivar", id)
+                                .header("X-LEGGA-TENANT-ID", identity.tenantId())
+                                .header("X-LEGGA-OBJECT-ID", identity.objectId())
+                                .retrieve()
+                                .toBodilessEntity();
+        }
+        // =========================================================
+        // REACTIVAR LEGAJO
+        // =========================================================
+
+        public void reactivar(
+                        UUID id,
+                        EasyAuthIdentity identity) {
+
+                restClient.patch()
+                                .uri("/api/legajos/{id}/reactivar", id)
+                                .header("X-LEGGA-TENANT-ID", identity.tenantId())
+                                .header("X-LEGGA-OBJECT-ID", identity.objectId())
+                                .retrieve()
+                                .toBodilessEntity();
+        }
         public ContextoIdentidadResponse consultarContexto(
                         EasyAuthIdentity identity) {
 

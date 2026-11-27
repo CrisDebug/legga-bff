@@ -16,9 +16,18 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * Configuración de seguridad y CORS del BFF LEGGA.
+ *
+ * Define:
+ * - Orígenes y métodos permitidos para Angular.
+ * - Protección CSRF.
+ * - Reglas de autorización según el modo de ejecución.
  */
 @Configuration
 public class SecurityConfig {
+
+        // ==================================================
+        // CONFIGURACIÓN GENERAL
+        // ==================================================
 
         @Value("${legga.cors.allowed-origins}")
         private String allowedOrigins;
@@ -26,30 +35,33 @@ public class SecurityConfig {
         @Value("${legga.security.dev-mode:false}")
         private boolean devMode;
 
+        // ==================================================
+        // CONFIGURACIÓN CORS
+        // ==================================================
+
         /**
-         * Configuración CORS para el frontend Angular.
+         * Configuración CORS para permitir la comunicación
+         * entre el frontend Angular y el backend BFF.
          */
         @Bean
         public CorsConfigurationSource corsConfigurationSource() {
 
                 CorsConfiguration configuration = new CorsConfiguration();
 
-                // Orígenes autorizados según el perfil activo.
                 configuration.setAllowedOrigins(
                                 Arrays.stream(allowedOrigins.split(","))
                                                 .map(String::trim)
                                                 .filter(origin -> !origin.isEmpty())
                                                 .toList());
 
-                // Métodos HTTP permitidos.
                 configuration.setAllowedMethods(List.of(
                                 "GET",
                                 "POST",
                                 "PUT",
+                                "PATCH",
                                 "DELETE",
                                 "OPTIONS"));
 
-                // Headers permitidos, incluidos los de contexto LEGGA.
                 configuration.setAllowedHeaders(List.of(
                                 "Content-Type",
                                 "Authorization",
@@ -59,10 +71,7 @@ public class SecurityConfig {
                                 "X-LEGGA-TENANT-ID",
                                 "X-LEGGA-OBJECT-ID"));
 
-                // Permite el envío de cookies.
                 configuration.setAllowCredentials(true);
-
-                // Tiempo de caché de la configuración CORS.
                 configuration.setMaxAge(3600L);
 
                 UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -72,32 +81,99 @@ public class SecurityConfig {
                 return source;
         }
 
-        /**
-         * Reglas de seguridad del BFF según el modo de ejecución.
-         */
+        // ==================================================
+        // CONFIGURACIÓN DE SEGURIDAD
+        // ==================================================
 
+        /**
+         * Configura la cadena de filtros de seguridad del BFF.
+         *
+         * En desarrollo se permiten determinadas operaciones
+         * para facilitar las pruebas desde Angular.
+         *
+         * En producción se mantienen las rutas protegidas
+         * mediante autenticación.
+         */
         @Bean
         public SecurityFilterChain securityFilterChain(HttpSecurity http)
                         throws Exception {
 
                 http
-                                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                                // ----------------------------------
+                                // CORS
+                                // ----------------------------------
+                                .cors(cors -> cors.configurationSource(
+                                                corsConfigurationSource()))
 
-                                // CSRF continúa habilitado.
-                                // Solo se excluye el POST de creación en desarrollo.
+                                // ----------------------------------
+                                // PROTECCIÓN CSRF
+                                // ----------------------------------
+                                // CSRF permanece habilitado globalmente.
+                                // Solo se excluyen endpoints específicos.
                                 .csrf(csrf -> {
+
+                                        // Exclusión para endpoints de monitoreo.
                                         csrf.ignoringRequestMatchers("/actuator/**");
 
                                         if (devMode) {
+
+                                                // Exclusiones CSRF para operaciones
+                                                // de desarrollo sobre legajos.
                                                 csrf.ignoringRequestMatchers(
+
+                                                                // Crear legajo.
                                                                 request -> "POST".equals(request.getMethod())
-                                                                                && "/api/v1/legajos".equals(request
-                                                                                                .getServletPath()));
+                                                                                && "/api/v1/legajos".equals(
+                                                                                                request.getServletPath()),
+
+                                                                // Actualizar legajo.
+                                                                request -> "PUT".equals(request.getMethod())
+                                                                                && request.getServletPath().startsWith(
+                                                                                                "/api/v1/legajos/"),
+
+                                                                // Actualización parcial de legajo.
+                                                                request -> "PATCH".equals(request.getMethod())
+                                                                                && request.getServletPath().startsWith(
+                                                                                                "/api/v1/legajos/"),
+
+                                                                // Crear categoría.
+                                                                request -> "POST".equals(request.getMethod())
+                                                                                && "/api/v1/categorias".equals(
+                                                                                                request.getServletPath()),
+
+                                                                // Crear requisito documental.
+                                                                request -> "POST".equals(request.getMethod())
+                                                                                && request.getServletPath().matches(
+                                                                                                "/api/v1/categorias/[^/]+/requisitos-documentales"),
+
+                                                                // Crear campo dinámico.
+                                                                request -> "POST".equals(request.getMethod())
+                                                                                && request.getServletPath().matches(
+                                                                                                "/api/v1/categorias/[^/]+/campos"),
+
+                                                                // Actualizar campo dinámico.
+                                                                request -> "PUT".equals(request.getMethod())
+                                                                                && request.getServletPath().matches(
+                                                                                                "/api/v1/categorias/[^/]+/campos/[^/]+"),
+
+                                                                // Eliminar campo dinámico.
+                                                                request -> "DELETE".equals(request.getMethod())
+                                                                                && request.getServletPath().matches(
+                                                                                                "/api/v1/categorias/[^/]+/campos/[^/]+"),
+
+                                                                // Cargar documento.
+                                                                request -> "POST".equals(request.getMethod())
+                                                                                && "/api/v1/documentos".equals(
+                                                                                                request.getServletPath()));
                                         }
                                 })
 
+                                // ----------------------------------
+                                // AUTORIZACIÓN
+                                // ----------------------------------
                                 .authorizeHttpRequests(auth -> {
 
+                                        // Endpoints públicos generales.
                                         auth.requestMatchers(
                                                         "/actuator/health",
                                                         "/actuator/health/**",
@@ -108,23 +184,69 @@ public class SecurityConfig {
 
                                         if (devMode) {
 
+                                                // Consultas GET permitidas en desarrollo.
                                                 auth.requestMatchers(
                                                                 HttpMethod.GET,
                                                                 "/api/v1/identidad/contexto",
                                                                 "/api/v1/legajos",
                                                                 "/api/v1/legajos/**",
                                                                 "/api/v1/categorias",
-                                                                "/api/v1/categorias/**")
+                                                                "/api/v1/categorias/**",
+                                                                "/api/v1/documentos",
+                                                                "/api/v1/documentos/**")
                                                                 .permitAll();
 
-                                                // Creación habilitada en desarrollo.
+                                                // Creación de legajos y categorías.
                                                 auth.requestMatchers(
                                                                 HttpMethod.POST,
-                                                                "/api/v1/legajos")
+                                                                "/api/v1/legajos",
+                                                                "/api/v1/categorias")
+                                                                .permitAll();
+
+                                                // Creación de requisitos documentales.
+                                                auth.requestMatchers(
+                                                                HttpMethod.POST,
+                                                                "/api/v1/categorias/*/requisitos-documentales")
+                                                                .permitAll();
+
+                                                // Administración de campos dinámicos.
+                                                auth.requestMatchers(
+                                                                HttpMethod.POST,
+                                                                "/api/v1/categorias/*/campos")
+                                                                .permitAll();
+
+                                                auth.requestMatchers(
+                                                                HttpMethod.PUT,
+                                                                "/api/v1/categorias/*/campos/*")
+                                                                .permitAll();
+
+                                                auth.requestMatchers(
+                                                                HttpMethod.DELETE,
+                                                                "/api/v1/categorias/*/campos/*")
+                                                                .permitAll();
+
+                                                // Actualización de legajos.
+                                                auth.requestMatchers(
+                                                                HttpMethod.PUT,
+                                                                "/api/v1/legajos/**")
+                                                                .permitAll();
+
+                                                // Actualización parcial de legajos.
+                                                auth.requestMatchers(
+                                                                HttpMethod.PATCH,
+                                                                "/api/v1/legajos/**")
+                                                                .permitAll();
+
+                                                // Carga de documentos permitida en desarrollo.
+                                                auth.requestMatchers(
+                                                                HttpMethod.POST,
+                                                                "/api/v1/documentos")
                                                                 .permitAll();
 
                                         } else {
 
+                                                // En producción las consultas
+                                                // requieren autenticación.
                                                 auth.requestMatchers(
                                                                 HttpMethod.GET,
                                                                 "/api/v1/identidad/contexto",
@@ -135,10 +257,10 @@ public class SecurityConfig {
                                                                 .authenticated();
                                         }
 
+                                        // Cualquier otra solicitud requiere autenticación.
                                         auth.anyRequest().authenticated();
                                 });
 
                 return http.build();
         }
-
 }

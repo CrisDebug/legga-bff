@@ -40,11 +40,16 @@ public class LegajoController {
     // =========================================================
 
     @GetMapping
-    public LegajoPageResponseDTO listar(HttpServletRequest request) {
+    public LegajoPageResponseDTO listar(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) UUID categoriaId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "6") int size,
+            HttpServletRequest request) {
 
         EasyAuthIdentity identity = obtenerIdentidad(request);
 
-        return legajoClient.listar(identity);
+        return legajoClient.listar(identity, q, categoriaId, page, size);
     }
 
     // =========================================================
@@ -62,7 +67,7 @@ public class LegajoController {
     }
 
     // =========================================================
-    // CREACIÓN DE LEGAJO
+    // CREACIÃ“N DE LEGAJO
     // =========================================================
 
     @PostMapping
@@ -73,10 +78,10 @@ public class LegajoController {
 
         EasyAuthIdentity identity = obtenerIdentidad(httpRequest);
 
-        // Adaptación del contrato público al contrato de MS-Legajos.
+        // AdaptaciÃ³n del contrato pÃºblico al contrato de MS-Legajos.
         var msRequest = legajoMapper.toMSRequest(request);
 
-        // La categoría se envía como parámetro de consulta.
+        // La categorÃ­a se envÃ­a como parÃ¡metro de consulta.
         return legajoClient.crear(
                 msRequest,
                 request.categoriaId(),
@@ -84,9 +89,54 @@ public class LegajoController {
     }
 
     // =========================================================
-    // RESOLUCIÓN DE IDENTIDAD
+    // RESOLUCIÃ“N DE IDENTIDAD
     // =========================================================
 
+    // =========================================================
+    // ACTUALIZACIÃ“N DE LEGAJO
+    // =========================================================
+
+    @PutMapping("/{id}")
+    public LegajoResponseDTO actualizar(
+            @PathVariable UUID id,
+            @RequestBody LegajoCreateRequest request,
+            HttpServletRequest httpRequest) {
+
+        EasyAuthIdentity identity = obtenerIdentidad(httpRequest);
+        var msRequest = legajoMapper.toMSRequest(request);
+
+        return legajoClient.actualizar(
+                id,
+                msRequest,
+                request.categoriaId(),
+                identity);
+    }
+    // =========================================================
+    // ARCHIVAR LEGAJO
+    // =========================================================
+
+    @PatchMapping("/{id}/archivar")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void archivar(
+            @PathVariable UUID id,
+            HttpServletRequest httpRequest) {
+
+        EasyAuthIdentity identity = obtenerIdentidad(httpRequest);
+        legajoClient.archivar(id, identity);
+    }
+    // =========================================================
+    // REACTIVAR LEGAJO
+    // =========================================================
+
+    @PatchMapping("/{id}/reactivar")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reactivar(
+            @PathVariable UUID id,
+            HttpServletRequest httpRequest) {
+
+        EasyAuthIdentity identity = obtenerIdentidad(httpRequest);
+        legajoClient.reactivar(id, identity);
+    }
     private EasyAuthIdentity obtenerIdentidad(HttpServletRequest request) {
 
         return identityResolver.resolve(request)
